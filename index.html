@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="نقشه من">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<title>📍 نقشه زنده من</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    font-family: 'Vazirmatn', 'Tahoma', -apple-system, sans-serif;
+    background: #0f172a;
+    color: #fff;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #map { position: absolute; inset: 0; z-index: 1; background: #1e293b; }
+  .header {
+    position: fixed;
+    top: env(safe-area-inset-top, 0);
+    left: 0; right: 0;
+    padding: 14px 16px 12px;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 12px currentColor;
+    animation: pulse 2s infinite;
+  }
+  .status-dot.active { background: #22c55e; color: #22c55e; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.2); }
+  }
+  .panel {
+    position: fixed;
+    bottom: env(safe-area-inset-bottom, 0);
+    left: 12px; right: 12px;
+    margin-bottom: 14px;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-radius: 20px;
+    padding: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .coord-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .coord-box {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .coord-label {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .coord-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: #e2e8f0;
+    direction: ltr;
+    text-align: right;
+    font-family: 'SF Mono', 'Menlo', monospace;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .info-row span:last-child { color: #60a5fa; font-weight: 600; }
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .btn {
+    padding: 12px;
+    border-radius: 14px;
+    border: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    box-shadow: 0 4px 12px rgba(59,130,246,0.4);
+  }
+  .btn-secondary {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .live-marker {
+    width: 22px;
+    height: 22px;
+    background: #3b82f6;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 4px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.6);
+    animation: ripple 2s infinite;
+  }
+  @keyframes ripple {
+    0% { box-shadow: 0 0 0 4px rgba(59,130,246,0.4), 0 0 20px rgba(59,130,246,0.6); }
+    100% { box-shadow: 0 0 0 14px rgba(59,130,246,0), 0 0 20px rgba(59,130,246,0); }
+  }
+  .welcome {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: linear-gradient(135deg, #0f172a, #1e1b4b);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    transition: opacity 0.5s;
+  }
+  .welcome.hide { opacity: 0; pointer-events: none; }
+  .welcome-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .welcome h2 {
+    font-size: 22px;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .welcome p {
+    color: #94a3b8;
+    font-size: 14px;
+    line-height: 1.7;
+    margin-bottom: 24px;
+    max-width: 320px;
+  }
+  .welcome .btn { min-width: 220px; padding: 14px 24px; }
+  .toast {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(34, 197, 94, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 10px 18px;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 3000;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s;
+    box-shadow: 0 4px 16px rgba(34,197,94,0.4);
+  }
+  .toast.show { opacity: 1; top: 70px; }
+  .leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+  }
+  .leaflet-control-zoom a {
+    background: rgba(15,23,42,0.9) !important;
+    color: #fff !important;
+    border: none !important;
+    width: 38px !important;
+    height: 38px !important;
+    line-height: 38px !important;
+    font-size: 18px !important;
+    backdrop-filter: blur(10px);
+  }
+  .offline-badge {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(251, 191, 36, 0.95);
+    color: #0f172a;
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 700;
+    z-index: 1500;
+    display: none;
+  }
+  .offline-badge.show { display: block; }
+</style>
+</head>
+<body>
+<div class="welcome" id="welcome">
+  <div class="welcome-icon">📍</div>
+  <h2>نقشه زنده من</h2>
+  <p>برای دیدن موقعیت لحظه‌ای شما روی نقشه، دسترسی به لوکیشن لازمه.<br>روی دکمه زیر بزن و اجازه بده.</p>
+  <button class="btn btn-primary" onclick="startTracking()">🚀 شروع ردیابی</button>
+</div>
+<div id="map"></div>
+<div class="header">
+  <h1>📍 نقشه زنده من</h1>
+  <div class="status-dot" id="status"></div>
+</div>
+<div class="offline-badge" id="offlineBadge">⚠️ آفلاین</div>
+<div class="panel">
+  <div class="coord-grid">
+    <div class="coord-box">
+      <div class="coord-label">عرض جغرافیایی</div>
+      <div class="coord-value" id="lat">--.------</div>
+    </div>
+    <div class="coord-box">
+      <div class="coord-label">طول جغرافیایی</div>
+      <div class="coord-value" id="lng">--.------</div>
+    </div>
+  </div>
+  <div class="info-row">
+    <span>🎯 دقت</span>
+    <span id="accuracy">— متر</span>
+  </div>
+  <div class="info-row" style="margin-top: 6px;">
+    <span>⛰️ ارتفاع</span>
+    <span id="altitude">— متر</span>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" onclick="copyCoords()">📋 کپی مختصات</button>
+    <button class="btn btn-secondary" onclick="shareLocation()">🔗 اشتراک‌گذاری</button>
+  </div>
+</div>
+<div class="toast" id="toast">کپی شد ✓</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([35.6892, 51.389], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  let marker = null;
+  let accuracyCircle = null;
+  let watchId = null;
+
+  function startTracking() {
+    document.getElementById('welcome').classList.add('hide');
+    if (!navigator.geolocation) {
+      alert('مرورگر شما از GPS پشتیبانی نمی‌کند');
+      return;
+    }
+    watchId = navigator.geolocation.watchPosition(onPositionUpdate, onPositionError, {
+      enableHighAccuracy: true, timeout: 30000, maximumAge: 0
+    });
+    setTimeout(() => { if (!marker) map.setView([35.6892, 51.389], 13); }, 5000);
+  }
+
+  function onPositionUpdate(pos) {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const acc = pos.coords.accuracy;
+    const alt = pos.coords.altitude;
+    document.getElementById('lat').textContent = lat.toFixed(6);
+    document.getElementById('lng').textContent = lng.toFixed(6);
+    document.getElementById('accuracy').textContent = Math.round(acc) + ' متر';
+    if (alt !== null && alt !== undefined) document.getElementById('altitude').textContent = Math.round(alt) + ' متر';
+    document.getElementById('status').classList.add('active');
+    if (!marker) {
+      marker = L.marker([lat, lng], { icon: L.divIcon({ className: '', html: '<div class="live-marker"></div>', iconSize: [22, 22] }) }).addTo(map);
+      accuracyCircle = L.circle([lat, lng], { radius: acc, color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 1 }).addTo(map);
+      map.setView([lat, lng], 17);
+    } else {
+      marker.setLatLng([lat, lng]);
+      accuracyCircle.setLatLng([lat, lng]);
+      accuracyCircle.setRadius(acc);
+      map.panTo([lat, lng], { animate: true, duration: 0.8 });
+    }
+  }
+
+  function onPositionError(err) {
+    let msg = '';
+    switch(err.code) {
+      case 1: msg = '❌ دسترسی به لوکیشن رد شد'; break;
+      case 2: msg = '❌ موقعیت در دسترس نیست'; break;
+      case 3: msg = '❌ تایم‌اوت'; break;
+    }
+    document.getElementById('accuracy').textContent = msg;
+  }
+
+  async function copyCoords() {
+    const lat = document.getElementById('lat').textContent;
+    const lng = document.getElementById('lng').textContent;
+    const text = `${lat}, ${lng}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('کپی شد ✓');
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      showToast('کپی شد ✓');
+    }
+  }
+
+  function shareLocation() {
+    const lat = document.getElementById('lat').textContent;
+    const lng = document.getElementById('lng').textContent;
+    const url = `https://maps.google.com/?q=${lat},${lng}`;
+    if (navigator.share) {
+      navigator.share({ title: 'موقعیت من', text: `${lat}, ${lng}`, url: url });
+    } else {
+      copyCoords();
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  // تشخیص آفلاین
+  window.addEventListener('online', () => document.getElementById('offlineBadge').classList.remove('show'));
+  window.addEventListener('offline', () => document.getElementById('offlineBadge').classList.add('show'));
+  if (!navigator.onLine) document.getElementById('offlineBadge').classList.add('show');
+
+  // ثبت Service Worker برای PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => console.log('SW failed:', err));
+    });
+  }
+</script>
+</body>
+</html>
